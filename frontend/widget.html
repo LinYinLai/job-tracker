@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>秋招助手</title>
+<style>
+  :root {
+    --bg: rgba(23, 20, 42, 0.86); --panel: rgba(255,255,255,0.07); --ink: #eceaf6; --muted: #a8a5b8;
+    --accent: #8b7cf6; --orange: #d95926; --edge: rgba(255,255,255,0.10);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: transparent; }
+  body {
+    color: var(--ink); font-family: -apple-system, "Microsoft YaHei", sans-serif;
+    display: flex; overflow: hidden; user-select: none; -webkit-user-select: none;
+    background: transparent;
+  }
+  .widget {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    background: var(--bg); border-radius: 16px; border: 1px solid var(--edge);
+    backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  }
+  .titlebar {
+    display: flex; align-items: center; gap: 8px; padding: 10px 12px; flex-shrink: 0;
+    border-bottom: 1px solid var(--edge); -webkit-app-region: drag;
+  }
+  .titlebar .title { font-size: 13px; font-weight: 600; flex: 1; }
+  .titlebar button { -webkit-app-region: no-drag; }
+  .btn { background: var(--accent); color: #fff; border: none; border-radius: 7px; padding: 5px 10px; font-size: 12px; cursor: pointer; }
+  .btn.ghost { background: rgba(255,255,255,0.08); color: var(--muted); }
+  .stats { display: flex; gap: 8px; padding: 12px 12px 4px; flex-shrink: 0; }
+  .stat { flex: 1; background: var(--panel); border-radius: 10px; padding: 10px 6px; text-align: center; }
+  .stat b { font-size: 20px; display: block; }
+  .stat span { font-size: 11px; color: var(--muted); }
+  .section { font-size: 11px; color: var(--muted); padding: 10px 12px 6px; flex-shrink: 0; }
+  .list { flex: 1; overflow-y: auto; padding: 0 12px; }
+  .list::-webkit-scrollbar { width: 5px; }
+  .list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+  .item { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; background: var(--panel); border-radius: 8px; margin-bottom: 6px; }
+  .item .name { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .dl { font-size: 11px; color: var(--orange); white-space: nowrap; }
+  .empty { color: var(--muted); font-size: 12px; padding: 8px 2px; }
+  .foot { padding: 8px 12px; border-top: 1px solid var(--edge); flex-shrink: 0; display: flex; gap: 8px; align-items: center; }
+  .foot .hint { font-size: 11px; color: var(--muted); flex: 1; }
+</style>
+</head>
+<body>
+  <div class="widget">
+    <div class="titlebar">
+      <span class="title">秋招助手</span>
+      <button class="btn" id="btn-open">打开完整版</button>
+      <button class="btn ghost" id="btn-close" title="退出">✕</button>
+    </div>
+    <div class="stats">
+      <div class="stat"><b id="n-apply">-</b><span>待投递</span></div>
+      <div class="stat"><b id="n-action">-</b><span>待推进</span></div>
+      <div class="stat"><b id="n-waiting">-</b><span>等待</span></div>
+    </div>
+    <div class="section">⏰ 3 天内截止的待投递岗位</div>
+    <div class="list" id="urgent"></div>
+    <div class="foot">
+      <span class="hint">30 秒自动刷新</span>
+      <button class="btn ghost" id="btn-refresh">刷新</button>
+    </div>
+  </div>
+  <script>
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    async function load() {
+      try {
+        const r = await fetch('/api/widget');
+        const d = await r.json();
+        document.getElementById('n-apply').textContent = d.counts.todo_apply ?? 0;
+        document.getElementById('n-action').textContent = d.counts.todo_action ?? 0;
+        document.getElementById('n-waiting').textContent = d.counts.waiting ?? 0;
+        const list = document.getElementById('urgent');
+        if (!d.urgent.length) {
+          list.innerHTML = '<div class="empty">没有快截止的岗位</div>';
+        } else {
+          list.innerHTML = d.urgent.map(u =>
+            `<div class="item"><span class="name">${esc(u.name)}</span><span class="dl">${u.days === 0 ? '今天截止' : u.days + ' 天后'}</span></div>`
+          ).join('');
+        }
+      } catch (e) {}
+    }
+    document.getElementById('btn-refresh').addEventListener('click', load);
+    document.getElementById('btn-open').addEventListener('click', () => window.open('/'));
+    document.getElementById('btn-close').addEventListener('click', () => window.close());
+    load();
+    setInterval(load, 30000);
+  </script>
+</body>
+</html>

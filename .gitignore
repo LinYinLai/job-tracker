@@ -1,0 +1,40 @@
+# === 密钥与敏感信息（绝不提交） ===
+.env
+backend/.env
+backend/cvm_pw.txt
+backend/demo_mailbox.txt
+
+# === 真实个人数据（简历、投递记录、数据库） ===
+data/
+
+# demo_data 是可再生的演示种子数据（seed_demo.py 生成），整体不入库
+demo_data/
+
+# demo 的预生成 AI 缓存（gen_demo_cache.py 可再生成）
+backend/demo_cache/
+
+# === Python ===
+.venv/
+__pycache__/
+*.pyc
+
+# === Node / Electron ===
+node_modules/
+dist/
+out/
+
+# === 真实面试材料（Word + 生成脚本，含个人经历/GPA/公司名） ===
+AI面试准备_完整回答稿.docx
+AI面试准备模板_v2.docx
+generate_answers_docx.py
+generate_template_docx.py
+
+# === 个人迁移笔记（含内部路径与敏感文件说明） ===
+迁移到MacBook.md
+
+# === 日志与打包 ===
+*.log
+*.tar.gz
+
+# === macOS ===
+.DS_Store

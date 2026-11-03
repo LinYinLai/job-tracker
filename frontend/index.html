@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --frame: rgba(38, 35, 46, 0.88);
+    --frame-edge: rgba(255, 255, 255, 0.08);
+    --frame-highlight: rgba(255, 255, 255, 0.07);
+    --frame-shadow: 0 22px 44px -20px rgba(0, 0, 0, 0.8), 0 6px 16px -8px rgba(0, 0, 0, 0.5);
+    --tile: linear-gradient(180deg, #3a3644 0%, #27242f 100%);
+    --tile-edge: rgba(255, 255, 255, 0.07);
+    --tile-highlight: rgba(255, 255, 255, 0.12);
+    --tile-shadow: 0 4px 10px -4px rgba(0, 0, 0, 0.7);
+    --well: rgba(255, 255, 255, 0.07);
+    --ink: #f4f4f5;
+    --muted: rgba(244, 244, 245, 0.55);
+    --faint: rgba(255, 255, 255, 0.22);
+    --ring: rgba(244, 244, 245, 0.3);
+    --solid: #f4f4f5;
+    --solid-ink: #18181b;
+    --red: #e5484d;
+    --yellow: #e8b13a;
+    --green: #4caf64;
+    --radius: 24px;
+    --font: "Inter", "Noto Sans SC", -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Consolas", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    font-family: var(--font);
+    color: var(--ink);
+    background: transparent;
+    -webkit-font-smoothing: antialiased;
+  }
+  .stage { position: relative; }
+
+  .btn {
+    font-family: var(--font); font-size: 13px; font-weight: 600; border-radius: 10px;
+    padding: 8px 14px; cursor: pointer; border: none; transition: filter 0.2s, transform 0.2s;
+  }
+  .btn:active { transform: scale(0.96); transition-duration: 0s; }
+  .btn--primary { background: var(--solid); color: var(--solid-ink); box-shadow: 0 4px 12px -6px rgba(0,0,0,0.5); }
+  .btn--primary:hover { filter: brightness(0.9); }
+  .btn--ghost { background: var(--tile); color: var(--ink); box-shadow: inset 0 0 0 1px var(--tile-edge), inset 0 1px 0 var(--tile-highlight), var(--tile-shadow); }
+  .btn--ghost:hover { filter: brightness(1.12); }
+
+  .widget {
+    width: 460px; max-width: 92vw; background: var(--frame); backdrop-filter: blur(20px) saturate(1.6);
+    border-radius: var(--radius); box-shadow: var(--frame-shadow); position: relative; overflow: hidden;
+    display: flex; flex-direction: column; height: 88vh; max-height: 92vh;
+  }
+  .tabs { display: flex; justify-content: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--frame-edge); flex-shrink: 0; }
+  .demo-banner { flex-shrink: 0; padding: 6px 12px; text-align: center; font-size: 11.5px; letter-spacing: .3px; color: #8a6410; background: rgba(232,177,58,.18); border-bottom: 1px solid var(--frame-edge); }
+  .tab { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); border: none; padding: 0; cursor: pointer; transition: background-color 0.25s ease, transform 0.45s cubic-bezier(0.34, 1.4, 0.64, 1); }
+  .tab.is-active { background: var(--solid); transform: scale(1.3); }
+  .panels { flex: 1; overflow: hidden; min-height: 0; position: relative; }
+  .panels__inner { position: absolute; top: 0; bottom: 0; left: 0; display: flex; width: 700%; transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.3, 1); }
+  .panels__inner.is-weekly { transform: translateX(-14.2857%); }
+  .panels__inner.is-resume { transform: translateX(-28.5714%); }
+  .panels__inner.is-settings { transform: translateX(-42.8571%); }
+  .panels__inner.is-email { transform: translateX(-57.1429%); }
+  .panels__inner.is-jobs { transform: translateX(-71.4286%); }
+  .panels__inner.is-smart { transform: translateX(-85.7143%); }
+  .panel { width: 14.2857%; height: 100%; overflow-y: auto; flex-shrink: 0; }
+  .panel::-webkit-scrollbar { width: 6px; }
+  .panel::-webkit-scrollbar-thumb { background: var(--well); border-radius: 3px; }
+  .panel::-webkit-scrollbar-thumb:hover { background: var(--faint); }
+  .panel::-webkit-scrollbar-track { background: transparent; }
+  .resume-list { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .resume-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: var(--well); border-radius: 8px; cursor: pointer; }
+  .resume-item:hover { background: var(--frame-highlight); }
+  .resume-item__name { font-size: 13px; font-weight: 500; color: var(--ink); }
+  .resume-item__arrow { color: var(--muted); font-size: 14px; }
+  .resume-file-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .settings-body { padding: 0 16px 16px; }
+  .settings-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .email-list { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .jobs-filters { padding: 0 16px 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .jobs-filters input, .jobs-filters select { width: 100%; box-sizing: border-box; background: var(--well); border: 1px solid var(--frame-edge); border-radius: 8px; color: var(--ink); font-family: var(--font); font-size: 12.5px; padding: 8px 10px; outline: none; }
+  .jobs-filters input:focus, .jobs-filters select:focus { border-color: var(--ring); }
+  .jobs-filters select option { color: #18181b; background: #ffffff; }
+  .jobs-filters .jobs-q { grid-column: 1 / -1; }
+  .jobs-order { display: flex; align-items: flex-start; gap: 2px; font-size: 12px; color: var(--muted); padding: 8px 4px 0; cursor: pointer; white-space: nowrap; }
+  .jobs-order input { accent-color: var(--solid); margin: 0; width: auto; padding: 0; border: none; background: transparent; }
+  .jobs-meta { padding: 0 16px 8px; font-size: 11.5px; color: var(--muted); }
+  .jobs-list { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .job-card { background: var(--well); border-radius: 8px; padding: 10px 12px; }
+  .job-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .job-company { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .job-deadline { font-size: 11px; color: #d95926; white-space: nowrap; }
+  .job-pos { font-size: 12px; color: var(--ink); margin: 4px 0; line-height: 1.4; }
+  .job-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+  .job-tag { font-size: 10.5px; color: var(--muted); background: var(--frame-highlight); padding: 1px 6px; border-radius: 4px; }
+  .job-foot { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .job-link { color: #3987e5; text-decoration: none; font-size: 11.5px; }
+  .job-link:hover { text-decoration: underline; }
+  .job-actions { display: flex; gap: 8px; margin-top: 8px; }
+  .job-tag--bad { color: #d55181; background: rgba(213, 81, 129, 0.16); }
+  .job-tag--consider { color: #d9a026; background: rgba(217, 160, 38, 0.16); }
+  .job-tag--applied { color: #199e70; background: rgba(25, 158, 112, 0.16); }
+  .jobs-show { display: flex; align-items: center; gap: 6px; padding: 0 16px 8px; font-size: 11.5px; color: var(--muted); }
+  .jobs-show input { accent-color: var(--solid); margin: 0; }
+  .smart-body { padding: 0 16px 16px; }
+  .smart-tier { margin-bottom: 16px; }
+  .smart-tier__head { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+  .job-reason { font-size: 11.5px; color: var(--muted); margin: 4px 0; line-height: 1.4; }
+  .email-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: var(--well); border-radius: 8px; }
+  .email-item__main { min-width: 0; }
+  .email-item__addr { font-size: 13px; font-weight: 500; color: var(--ink); }
+  .email-item__imap { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .pdf-icon { display: inline-flex; align-items: center; justify-content: center; background: none; border: none; cursor: pointer; padding: 0; }
+  .pdf-icon:hover { opacity: 0.85; }
+  .weekly-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 8px; }
+  .weekly-head span { font-size: 13px; font-weight: 600; color: var(--ink); }
+  #weekly-body { padding: 0 16px 16px; font-size: 13px; line-height: 1.7; color: var(--ink); }
+  #weekly-body h3 { font-size: 14px; font-weight: 600; margin: 14px 0 6px; }
+  #weekly-body h3:first-child { margin-top: 0; }
+  #weekly-body p { margin: 4px 0; }
+  #weekly-body .md-li { margin: 3px 0 3px 6px; }
+  #weekly-body b { color: var(--solid); }
+  .wk-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+  .wk-stat { background: var(--well); border-radius: 8px; padding: 12px 8px; text-align: center; }
+  .wk-stat b { display: block; font-size: 20px; font-weight: 700; color: var(--ink); }
+  .wk-stat span { font-size: 11px; color: var(--muted); }
+  .wk-section { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; margin: 14px 0 8px; }
+  .wk-chart { height: 190px; position: relative; }
+  .wk-summary { font-size: 13px; line-height: 1.7; color: var(--ink); background: var(--well); border-radius: 8px; padding: 12px 14px; margin-top: 14px; }
+  .widget::before { content:''; position:absolute; inset:0; border-radius:inherit; box-shadow: inset 0 0 0 1px var(--frame-edge), inset 0 1px 0 var(--frame-highlight); pointer-events:none; z-index:2; }
+
+  .widget__head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 14px; border-bottom: 1px solid var(--frame-edge); -webkit-app-region: drag; }
+  .widget__head button { -webkit-app-region: no-drag; }
+  .board-search { padding: 12px 16px 0; flex-shrink: 0; display: flex; gap: 8px; align-items: center; }
+  .board-search input { flex: 1; min-width: 0; box-sizing: border-box; background: var(--well); border: 1px solid var(--frame-edge); border-radius: 8px; color: var(--ink); font-family: var(--font); font-size: 13px; padding: 9px 10px; outline: none; }
+  .board-search input:focus { border-color: var(--ring); }
+  .task__portfolio { font-size: 10px; color: #8b7cf6; background: rgba(139, 124, 246, 0.18); padding: 1px 5px; border-radius: 4px; margin-left: 4px; white-space: nowrap; }
+  .widget__head-left { min-width: 0; }
+  .widget__title { font-size: 15px; font-weight: 600; }
+  .widget__date { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .widget__actions { display: flex; gap: 8px; }
+
+  .zone { padding: 6px 10px 2px; }
+  .zone + .zone { border-top: 1px solid var(--frame-edge); }
+  .zone__head { display: flex; align-items: center; gap: 7px; padding: 12px 8px 8px; cursor: pointer; }
+  .zone__chevron { font-size: 10px; color: var(--muted); transition: transform 0.2s; flex-shrink: 0; }
+  .zone.is-collapsed .zone__chevron { transform: rotate(-90deg); }
+  .zone.is-collapsed .zone__body { display: none; }
+  .zone__name { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .zone__count { font-family: var(--mono); font-size: 10.5px; color: var(--ink); background: var(--well); border: 1px solid var(--frame-edge); border-radius: 99px; padding: 1px 7px; min-width: 20px; text-align: center; }
+  .zone__hint { margin-left: auto; font-size: 11px; color: var(--muted); }
+
+  .task { display: flex; align-items: center; gap: 11px; padding: 10px; border-radius: 12px; transition: background-color 0.2s; }
+  .task:hover { background: var(--well); }
+  .task__dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .task__dot--red { background: var(--red); box-shadow: 0 0 0 3px rgba(229,72,77,0.16); }
+  .task__dot--yellow { background: var(--yellow); box-shadow: 0 0 0 3px rgba(232,177,58,0.14); }
+  .task__dot--green { background: var(--green); box-shadow: 0 0 0 3px rgba(76,175,100,0.16); }
+  .task__emoji { font-size: 13px; flex-shrink: 0; }
+  .task__main { cursor: pointer; }
+
+  .path { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .pnode { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .pnode__mark { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; flex-shrink: 0; }
+  .pnode--done .pnode__mark { background: var(--solid); color: var(--solid-ink); }
+  .pnode--current .pnode__mark { box-shadow: inset 0 0 0 1.5px var(--ink); color: var(--ink); }
+  .pnode--reject .pnode__mark { background: var(--red); color: #fff; }
+  .pnode--done .pnode__name { color: var(--muted); }
+  .pnode__name { color: var(--ink); }
+
+  .modal__sub { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 12.5px; color: var(--muted); }
+  .modal__sub a { color: var(--ink); text-decoration: none; border-bottom: 1px dashed var(--ring); }
+  .modal__sub a:hover { color: var(--solid); }
+  #result-body h3 { font-size: 14px; font-weight: 600; margin: 14px 0 6px; color: var(--ink); }
+  #result-body h3:first-child { margin-top: 0; }
+  #result-body p { margin: 4px 0; }
+  #result-body .md-li { margin: 3px 0 3px 6px; }
+  #result-body b { color: var(--solid); }
+  .task__main { flex: 1; min-width: 0; }
+  .task__title { font-size: 13.5px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .task__node { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .task__deadline { font-size: 11px; color: var(--muted); }
+  .task__deadline--soon { color: #d95926; font-weight: 600; }
+  .task__deadline--overdue { color: #e5484d; font-weight: 600; }
+  .task__stage-time { color: #e8b13a; font-weight: 600; }
+  .task__position { font-size: 11px; color: var(--muted); font-weight: 400; }
+  .task__meta { font-family: var(--mono); font-size: 11px; color: var(--muted); flex-shrink: 0; }
+
+  .mini {
+    font-family: var(--font); font-size: 11.5px; font-weight: 600; border-radius: 7px; padding: 5px 10px;
+    cursor: pointer; border: none; flex-shrink: 0; transition: filter 0.2s;
+  }
+  .mini--solid { background: var(--solid); color: var(--solid-ink); }
+  .mini--solid:hover { filter: brightness(0.9); }
+  .mini--ghost { background: var(--well); color: var(--muted); border: 1px solid var(--frame-edge); }
+  .mini--ghost:hover { color: var(--ink); }
+  .mini--danger { background: none; color: var(--muted); }
+  .mini--danger:hover { color: var(--red); }
+
+  .widget__foot { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-top: 1px solid var(--frame-edge); font-size: 11px; color: var(--muted); }
+  .legend { display: flex; align-items: center; gap: 5px; }
+
+  .modal { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 30px; background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); z-index: 40; opacity: 0; visibility: hidden; transition: opacity .2s, visibility .2s; }
+  .modal.is-open { opacity: 1; visibility: visible; }
+  .modal__box { width: 360px; max-width: 100%; background: var(--frame); backdrop-filter: blur(20px) saturate(1.6); border-radius: var(--radius); box-shadow: var(--frame-shadow); padding: 20px; position: relative; }
+  .modal__box::before { content:''; position:absolute; inset:0; border-radius:inherit; box-shadow: inset 0 0 0 1px var(--frame-edge), inset 0 1px 0 var(--frame-highlight); pointer-events:none; }
+  .modal__title { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 6px; letter-spacing: .04em; }
+  .field input, .field select, .field textarea { width: 100%; background: var(--well); border: 1px solid var(--frame-edge); border-radius: 8px; color: var(--ink); font-family: var(--font); font-size: 13px; padding: 9px 10px; outline: none; }
+  .field input[type="checkbox"] { width: auto; padding: 0; border: none; background: transparent; accent-color: var(--solid); margin: 0; }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--ring); }
+  .field textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
+  .field select option { color: #18181b; background: #ffffff; }
+  .detail-tabs, .settings-tabs { display: flex; gap: 8px; padding: 0 4px 12px; }
+  .detail-tab, .settings-tab { flex: 1; padding: 8px 0; border: 1px solid var(--frame-edge); border-radius: 8px; background: var(--well); color: var(--muted); font-size: 13px; cursor: pointer; }
+  .detail-tab.is-active, .settings-tab.is-active { background: var(--frame-highlight); color: var(--ink); border-color: var(--ring); }
+  .modal__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="widget">
+    <header class="widget__head">
+      <div class="widget__head-left">
+        <div class="widget__title">Job Tracker</div>
+        <div class="widget__date" id="widget-date"></div>
+      </div>
+      <div class="widget__actions">
+        <button class="btn btn--primary" id="btn-new">+📝</button>
+        <button class="btn btn--ghost" id="btn-check">📬</button>
+        <button class="btn btn--ghost" id="btn-min" title="最小化">─</button>
+        <button class="btn btn--ghost" id="btn-close" title="关闭">✕</button>
+      </div>
+    </header>
+
+    <div class="tabs">
+      <button class="tab is-active" data-tab="board" aria-label="四区"></button>
+      <button class="tab" data-tab="weekly" aria-label="周报"></button>
+      <button class="tab" data-tab="resume" aria-label="简历"></button>
+      <button class="tab" data-tab="settings" aria-label="AI配置"></button>
+      <button class="tab" data-tab="email" aria-label="邮箱"></button>
+      <button class="tab" data-tab="jobs" aria-label="岗位库"></button>
+      <button class="tab" data-tab="smart" aria-label="智能选岗"></button>
+    </div>
+
+    <div class="panels">
+      <div class="panels__inner" id="panels-inner">
+        <div class="panel">
+          <div class="board-search">
+            <input type="text" id="board-search" placeholder="🔍 搜索企业或岗位">
+            <button class="mini mini--ghost" id="btn-portfolio" title="用 AI 识别需要作品集的岗位">🎨 作品集</button>
+          </div>
+          <div id="panel"></div>
+        </div>
+        <div class="panel">
+          <div class="weekly-head">
+            <span>秋招进度周报</span>
+            <button class="mini mini--ghost" id="btn-regenerate">生成</button>
+          </div>
+          <div id="weekly-body"><p style="color:var(--muted)">点击右上角「生成」按钮生成周报</p></div>
+        </div>
+        <div class="panel">
+          <div class="weekly-head">
+            <span>我的简历</span>
+            <button class="mini mini--ghost" id="btn-resume-new">新建简历</button>
+          </div>
+          <div class="resume-list" id="resume-list"></div>
+        </div>
+        <div class="panel">
+          <div class="weekly-head">
+            <span>AI 配置🤖</span>
+            <button class="mini mini--ghost" id="btn-settings-save">保存</button>
+          </div>
+          <div class="settings-body">
+            <div class="settings-tabs">
+              <button class="settings-tab is-active" data-stab="model">模型配置</button>
+              <button class="settings-tab" data-stab="prompt">Prompt</button>
+            </div>
+            <div id="settings-page-model">
+              <div class="field">
+                <label>LLM 厂商</label>
+                <select id="setting-vendor">
+                  <option value="deepseek">DeepSeek</option>
+                  <option value="doubao">豆包（火山方舟）</option>
+                  <option value="kimi">Kimi（月之暗面）</option>
+                  <option value="glm">智谱 GLM</option>
+                  <option value="qwen">通义千问</option>
+                  <option value="custom">自定义</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Base URL</label>
+                <input type="text" id="setting-base-url" placeholder="https://api.deepseek.com">
+              </div>
+              <div class="field">
+                <label>模型</label>
+                <input type="text" id="setting-model" placeholder="deepseek-flash">
+              </div>
+              <div class="field">
+                <label>API Key</label>
+                <input type="password" id="setting-llm" placeholder="sk-...">
+              </div>
+              <div class="field">
+                <label>搜索 Base URL</label>
+                <input type="text" id="setting-search-url" placeholder="https://api.deepseek.com/v1/tools/search">
+              </div>
+              <div class="field">
+                <label>搜索 API Key</label>
+                <input type="password" id="setting-search-key" placeholder="留空则复用 LLM 的 key">
+              </div>
+              <p class="settings-hint">密钥保存在本地 data/settings.json，仅你自己能访问</p>
+            </div>
+            <div id="settings-page-prompt" style="display:none;">
+              <p class="settings-hint">Prompt 模板（占位符：面试准备用 $resume / $name / $pos / $jd；周报用 $total / $nature_counts / $scale_counts / $tech_counts / $stage_counts）</p>
+              <div class="field">
+                <label>AI 面试准备 Prompt</label>
+                <textarea id="setting-prep-prompt" style="min-height:200px;"></textarea>
+              </div>
+              <div class="field">
+                <label>周报 Prompt</label>
+                <textarea id="setting-weekly-prompt" style="min-height:90px;"></textarea>
+              </div>
+              <button class="mini mini--ghost" id="btn-prompts-reset">恢复默认</button>
+              <button class="mini mini--solid" id="btn-prompts-save">保存 Prompt</button>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="weekly-head">
+            <span>邮箱📬</span>
+            <button class="mini mini--ghost" id="btn-email-new">添加邮箱</button>
+          </div>
+          <div class="email-list" id="email-list"></div>
+        </div>
+        <div class="panel">
+          <div class="weekly-head">
+            <span>岗位库🔍</span>
+            <button class="mini mini--ghost" id="btn-jobs-upload">上传Excel</button>
+          </div>
+          <input type="file" id="jobs-file" accept=".xlsx,.xls" hidden>
+          <div class="jobs-filters">
+            <input type="text" id="jobs-q" class="jobs-q" placeholder="关键词（岗位/公司/专业）">
+            <input type="text" id="jobs-location" value="广州 深圳" placeholder="工作地点（多个用空格/逗号隔开，任一即可）">
+            <select id="jobs-industry"><option value="">行业（全部）</option></select>
+            <select id="jobs-nature"><option value="">企业性质（全部）</option></select>
+            <select id="jobs-year"><option value="">全部届次</option><option value="2027届">届次：2027届</option></select>
+            <select id="jobs-education"><option value="">全部学历</option><option value="硕士">学历：硕士</option></select>
+            <select id="jobs-batch"><option value="">批次（全部）</option></select>
+            <select id="jobs-sort">
+              <option value="updated">排序：更新时间</option>
+              <option value="deadline">排序：截止时间</option>
+              <option value="company">排序：公司名称</option>
+            </select>
+            <label class="jobs-order"><input type="checkbox" id="jobs-order" checked> 倒序</label>
+            <select id="jobs-mark">
+              <option value="">状态：未标记</option>
+              <option value="unsuitable">状态：不合适</option>
+              <option value="consider">状态：待考虑</option>
+              <option value="applied">状态：已加入待投</option>
+            </select>
+          </div>
+          <label class="jobs-show"><input type="checkbox" id="jobs-merge-mode" checked> 更新导入（保留已标注）</label>
+          <div class="jobs-meta" id="jobs-meta"></div>
+          <div class="jobs-list" id="jobs-list"></div>
+          <button class="btn btn--ghost" id="btn-jobs-more" style="display:none; margin: 0 16px 16px; width: calc(100% - 32px);">加载更多</button>
+        </div>
+        <div class="panel">
+          <div class="weekly-head">
+            <span>智能选岗✨</span>
+            <button class="mini mini--ghost" id="btn-smart-run">生成推荐</button>
+          </div>
+          <div class="smart-body">
+            <div class="field">
+              <label>求职要求（可空，默认按简历推荐）</label>
+              <input type="text" id="smart-req" placeholder="如：偏金融类岗位 / 深圳数据分析岗 / 国企投资金融岗">
+            </div>
+            <div id="smart-tiers"><p style="color:var(--muted); font-size:12.5px;">点击右上角「生成推荐」，将根据简历 + 岗位库用 AI 分成金融 / AI / 热门新兴三类推荐</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="widget__foot">
+      <span class="legend">阶段由邮箱关键词自动识别（测评/笔试/AI面试/面试/拒绝）</span>
+      <span class="legend" id="email-status"></span>
+    </footer>
+
+<div class="modal" id="create-modal">
+  <div class="modal__box">
+    <div class="modal__title">新建企业</div>
+    <div class="field">
+      <label>企业名称</label>
+      <input type="text" id="create-name" placeholder="如 字节跳动">
+    </div>
+    <div class="field">
+      <label>岗位</label>
+      <input type="text" id="create-position" placeholder="如 产品经理">
+    </div>
+    <div class="field">
+      <label>投递网址</label>
+      <input type="text" id="create-url" placeholder="如 https://...">
+    </div>
+    <div class="field">
+      <label>截止时间</label>
+      <input type="text" id="create-deadline" placeholder="如 2026-10-31 或 尽快投递">
+    </div>
+    <div class="modal__actions">
+      <button class="btn btn--ghost" id="create-import">从 Excel 导入</button>
+      <button class="btn btn--ghost" id="create-cancel">取消</button>
+      <button class="btn btn--primary" id="create-submit">创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- 公司详情弹窗 -->
+<div class="modal" id="detail-modal">
+  <div class="modal__box" style="max-height: 86vh; overflow-y: auto;">
+    <div class="detail-tabs">
+      <button class="detail-tab is-active" data-dtab="info">信息</button>
+      <button class="detail-tab" data-dtab="flow">流程</button>
+    </div>
+    <div class="detail-page" id="detail-page-info">
+      <div class="field">
+        <label>企业名称</label>
+        <input type="text" id="detail-name" placeholder="企业名称">
+      </div>
+      <div class="field">
+        <label>岗位</label>
+        <input type="text" id="detail-position" placeholder="如 产品经理">
+      </div>
+      <div class="field">
+        <label>所在区域</label>
+        <select id="detail-zone">
+          <option value="">自动（按阶段）</option>
+          <option value="todo_apply">待投递区</option>
+          <option value="todo_action">待推进区</option>
+          <option value="waiting">只投了简历</option>
+          <option value="waiting_advanced">已推进</option>
+          <option value="done">已完成区</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>投递网址</label>
+        <div style="display:flex; gap:6px;">
+          <input type="text" id="detail-url" placeholder="如 https://..." style="flex:1;">
+          <button class="btn btn--ghost" id="detail-open-url" title="用默认浏览器打开" style="flex-shrink:0;">打开 ↗</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>截止时间</label>
+        <input type="text" id="detail-deadline" placeholder="如 2026-10-31 或 尽快投递">
+      </div>
+      <div class="field">
+        <label>阶段时间（笔试/面试时间）</label>
+        <input type="text" id="detail-stage-time" placeholder="如 2026年10月31日（周六）上午9:30" style="color: #e8b13a; font-weight: 600;">
+        <label style="display:flex; align-items:center; gap:6px; margin-top:6px; font-size:12px; color:var(--muted); cursor:pointer;">
+          <input type="checkbox" id="detail-stage-time-locked" style="margin:0;"> 订住（下次邮件检测不更新此栏）
+        </label>
+      </div>
+      <div class="field">
+        <label>JD（岗位描述）</label>
+        <textarea id="detail-jd" placeholder="投递时粘贴 JD"></textarea>
+      </div>
+      <div class="field">
+        <label>备注</label>
+        <textarea id="detail-note" placeholder="备注会置顶显示，用于标记重点/提醒"></textarea>
+      </div>
+    </div>
+    <div class="detail-page" id="detail-page-flow" style="display:none;">
+      <div class="path" id="detail-path"></div>
+    </div>
+    <div class="modal__actions">
+      <button class="btn btn--ghost" id="detail-prep">AI 面试准备</button>
+      <button class="btn btn--ghost" id="detail-close">关闭</button>
+      <button class="btn btn--primary" id="detail-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 待考虑备注弹窗 -->
+<div class="modal" id="consider-modal">
+  <div class="modal__box">
+    <div class="modal__title">待考虑 · 备注原因</div>
+    <div class="field">
+      <textarea id="consider-note" placeholder="备注原因（可空）"></textarea>
+    </div>
+    <div class="modal__actions">
+      <button class="btn btn--ghost" id="consider-cancel">取消</button>
+      <button class="btn btn--primary" id="consider-save">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI 报告弹窗 -->
+<div class="modal" id="result-modal" style="z-index: 50;">
+  <div class="modal__box" style="width: 560px; max-width: 94vw; max-height: 82vh; display: flex; flex-direction: column;">
+    <div class="modal__title" id="result-title">AI 报告</div>
+    <div id="result-body" style="overflow-y: auto; font-size: 13px; line-height: 1.7; color: var(--ink); background: var(--well); border-radius: 8px; padding: 14px; flex: 1; min-height: 240px;"></div>
+    <div class="modal__actions" style="margin-top: 12px;">
+      <button class="btn btn--ghost" id="result-close">关闭</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="import-file" accept=".xlsx,.xls" hidden>
+<input type="file" id="resume-pdf-file" accept=".pdf" hidden>
+
+<!-- 邮箱弹窗 -->
+<div class="modal" id="email-modal">
+  <div class="modal__box">
+    <div class="modal__title">邮箱</div>
+    <div class="field">
+      <label>IMAP 服务器</label>
+      <input type="text" id="email-imap" placeholder="imap.qq.com">
+    </div>
+    <div class="field">
+      <label>邮箱地址</label>
+      <input type="text" id="email-address" placeholder="xxx@qq.com">
+    </div>
+    <div class="field">
+      <label>授权码</label>
+      <input type="password" id="email-password" placeholder="授权码（不是登录密码）">
+    </div>
+    <div class="modal__actions">
+      <button class="btn btn--ghost" id="email-cancel">取消</button>
+      <button class="btn btn--primary" id="email-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 简历详情弹窗 -->
+<div class="modal" id="resume-detail-modal">
+  <div class="modal__box" style="max-height: 86vh; overflow-y: auto;">
+    <div class="modal__title">简历</div>
+    <div class="field">
+      <label>岗位方向</label>
+      <input type="text" id="resume-name" placeholder="如 投资分析 / 产品经理">
+    </div>
+    <div class="resume-file-row">
+      <button class="mini mini--ghost" id="resume-upload">上传 PDF</button>
+      <button class="pdf-icon" id="resume-open" style="display:none" title="打开 PDF 文件">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path d="M6 2h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" fill="#e53935"/>
+          <path d="M14 2l5 5h-4a1 1 0 0 1-1-1V2z" fill="#ffcdd2"/>
+          <text x="12" y="16.5" text-anchor="middle" font-size="5.5" font-weight="700" fill="#ffffff" font-family="Arial, Helvetica, sans-serif">PDF</text>
+        </svg>
+      </button>
+    </div>
+    <div class="field">
+      <label>简历内容</label>
+      <textarea id="resume-content" placeholder="粘贴简历内容"></textarea>
+    </div>
+    <div class="modal__actions">
+      <button class="btn btn--ghost" id="resume-delete">删除</button>
+      <button class="btn btn--ghost" id="resume-detail-close">关闭</button>
+      <button class="btn btn--primary" id="resume-save">保存</button>
+    </div>
+  </div>
+</div>
+  </div>
+</div>
+
+<script>
+  let COMPANIES = [];
+  // 默认折叠除「待推进区」外的三个区
+  let collapsedZones = new Set(['todo_apply', 'waiting', 'waiting_advanced', 'done']);
+  let boardQuery = '';
+  document.getElementById('board-search').addEventListener('input', (e) => {
+    boardQuery = e.target.value.trim();
+    render();
+  });
+  document.getElementById('btn-portfolio').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-portfolio');
+    btn.textContent = '识别中…';
+    try {
+      const res = await api('/api/portfolio-classify', { method: 'POST' });
+      alert(`识别完成：${res.count} 家需要作品集`);
+      await reload();
+    } catch (e) {
+      alert('识别失败：' + e);
+    } finally {
+      btn.textContent = '🎨 作品集';
+    }
+  });
+
+  async function api(path, opts = {}) {
+    const r = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
+    return r.json();
+  }
+
+  async function reload() {
+    COMPANIES = await api('/api/companies');
+    render();
+  }
+
+  function dotHtml(c, zoneKey) {
+    if (zoneKey === 'done') return '<span class="task__emoji">❌</span>';
+    if (zoneKey === 'todo_apply') return '<span class="task__dot task__dot--red" title="未投递"></span>';
+    if (zoneKey === 'todo_action') return '<span class="task__dot task__dot--green" title="待我推进"></span>';
+    const cls = (c.wait_days != null && c.wait_days > 7) ? 'task__dot--red' : 'task__dot--yellow';
+    const ttl = c.wait_days != null ? `已等待 ${c.wait_days} 天` : '';
+    return `<span class="task__dot ${cls}" title="${ttl}"></span>`;
+  }
+
+  function deadlineHtml(c) {
+    const dl = (c.deadline || '').trim();
+    if (!dl) return '';
+    const m = String(dl).match(/20\d{2}[-/]\d{1,2}[-/]\d{1,2}/);
+    if (!m) return `<span class="task__deadline">${esc(dl)}</span>`;
+    const d = new Date(m[0].replace(/\//g, '-') + 'T00:00:00');
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const days = Math.round((d - today) / 86400000);
+    let cls = 'task__deadline', label = dl;
+    if (days < 0) { cls += ' task__deadline--overdue'; label = dl + '（已过期）'; }
+    else if (days <= 3) { cls += ' task__deadline--soon'; label = dl + `（${days === 0 ? '今天' : days + '天后'}截止）`; }
+    return `<span class="${cls}">${esc(label)}</span>`;
+  }
+
+  function render() {
+    const zones = [
+      { key: 'todo_apply', name: '待投递区💪', hint: '还没投' },
+      { key: 'todo_action', name: '待推进区⏰', hint: '要我做（测评/面试）' },
+      { key: 'waiting', name: '只投了简历📮', hint: '等回复' },
+      { key: 'waiting_advanced', name: '已推进⏳', hint: '已做过测评/笔试/面试' },
+      { key: 'done', name: '已完成区☠️', hint: '已拒绝' }
+    ];
+    const panel = document.getElementById('panel');
+    panel.innerHTML = zones.map(z => {
+      const items = COMPANIES.filter(c => {
+        if (c.zone !== z.key) return false;
+        if (boardQuery) {
+          const q = boardQuery.toLowerCase();
+          if (!(c.name || '').toLowerCase().includes(q) && !(c.position || '').toLowerCase().includes(q)) return false;
+        }
+        return true;
+      }).sort((a, b) => ((b.note || '').trim() ? 1 : 0) - ((a.note || '').trim() ? 1 : 0));
+      return `
+        <section class="zone${collapsedZones.has(z.key) ? ' is-collapsed' : ''}" data-zone="${z.key}">
+          <div class="zone__head">
+            <span class="zone__chevron">▾</span>
+            <span class="zone__name">${z.name}</span>
+            <span class="zone__count">${items.length}</span>
+            <span class="zone__hint">${z.hint}</span>
+          </div>
+          <div class="zone__body">
+          ${items.map(c => {
+            let action = '';
+            if (z.key === 'todo_apply') action = '<button class="mini mini--solid" data-act="advance">已投递</button>';
+            else if (z.key === 'todo_action') action = '<button class="mini mini--solid" data-act="advance">已完成</button>';
+            else if (z.key === 'waiting' || z.key === 'waiting_advanced') action = '<button class="mini mini--ghost" data-act="reject">标记拒绝</button>';
+            const deadline = z.key === 'todo_apply' ? deadlineHtml(c) : '';
+            const stageTime = c.stage_time ? ` · ⏰ <span class="task__stage-time">${esc(c.stage_time)}</span>` : '';
+            const noteText = (z.key === 'todo_apply' && (c.note || '').trim()) ? ` · 📝 ${esc(c.note)}` : '';
+            return `
+              <div class="task" data-id="${c.id}">
+                ${dotHtml(c, z.key)}
+                <div class="task__main">
+                  <div class="task__title">${(c.note || '').trim() ? '📌 ' : ''}${c.name}${c.portfolio ? ' <span class="task__portfolio">🎨作品集</span>' : ''}${c.position ? ` <span class="task__position">${c.position}</span>` : ''}</div>
+                  <div class="task__node">${c.stage}${noteText}${deadline ? ' · ' + deadline : ''}${stageTime}</div>
+                </div>
+                ${action}
+                <button class="mini mini--danger" data-act="delete" title="删除">✕</button>
+              </div>`;
+          }).join('')}
+          </div>
+        </section>`;
+    }).join('');
+    panel.querySelectorAll('[data-act]').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        const id = Number(btn.closest('.task').dataset.id);
+        const act = btn.dataset.act;
+        if (act === 'advance') await api(`/api/companies/${id}/advance`, { method: 'POST' });
+        else if (act === 'reject') await api(`/api/companies/${id}/reject`, { method: 'POST' });
+        else if (act === 'delete') await api(`/api/companies/${id}`, { method: 'DELETE' });
+        await reload();
+      });
+    });
+    panel.querySelectorAll('.task__main').forEach(el => {
+      el.addEventListener('click', () => openDetail(Number(el.closest('.task').dataset.id)));
+    });
+    panel.querySelectorAll('.zone__head').forEach(head => {
+      head.addEventListener('click', () => {
+        const zone = head.parentElement;
+        zone.classList.toggle('is-collapsed');
+        if (zone.classList.contains('is-collapsed')) collapsedZones.add(zone.dataset.zone);
+        else collapsedZones.delete(zone.dataset.zone);
+      });
+    });
+  }
+
+  // 新建企业
+  const createModal = document.getElementById('create-modal');
+  function openCreate() {
+    pendingApplyJobId = null;
+    document.getElementById('create-name').value = '';
+    document.getElementById('create-position').value = '';
+    document.getElementById('create-url').value = '';
+    document.getElementById('create-deadline').value = '';
+    createModal.classList.add('is-open');
+    document.getElementById('create-name').focus();
+  }
+  function closeCreate() { createModal.classList.remove('is-open'); pendingApplyJobId = null; }
+  document.getElementById('btn-new').addEventListener('click', openCreate);
+  document.getElementById('btn-min').addEventListener('click', () => { if (window.desktop) window.desktop.minimize(); });
+  document.getElementById('btn-close').addEventListener('click', () => { if (window.desktop) window.desktop.close(); else window.close(); });
+  document.getElementById('create-cancel').addEventListener('click', closeCreate);
+  document.getElementById('create-submit').addEventListener('click', async () => {
+    const name = document.getElementById('create-name').value.trim();
+    if (!name) return;
+    const url = document.getElementById('create-url').value.trim();
+    const position = document.getElementById('create-position').value.trim();
+    const deadline = document.getElementById('create-deadline').value.trim();
+    const applyJobId = pendingApplyJobId;
+    await api('/api/companies', { method: 'POST', body: JSON.stringify({ name, url, position, deadline }) });
+    closeCreate();
+    document.getElementById('create-name').value = '';
+    document.getElementById('create-url').value = '';
+    document.getElementById('create-position').value = '';
+    document.getElementById('create-deadline').value = '';
+    await reload();
+    if (applyJobId != null) {
+      await markJob(applyJobId, 'applied', '');
+    }
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeCreate(); document.getElementById('detail-modal').classList.remove('is-open'); document.getElementById('result-modal').classList.remove('is-open'); document.getElementById('resume-detail-modal').classList.remove('is-open'); document.getElementById('email-modal').classList.remove('is-open'); }
+  });
+
+  // 公司详情
+  let detailId = null;
+  async function openDetail(cid) {
+    detailId = cid;
+    const c = await api(`/api/companies/${cid}`);
+    document.getElementById('detail-name').value = c.name || '';
+    document.getElementById('detail-position').value = c.position || '';
+    document.getElementById('detail-url').value = c.url || '';
+    document.getElementById('detail-deadline').value = c.deadline || '';
+    document.getElementById('detail-stage-time').value = c.stage_time || '';
+    document.getElementById('detail-stage-time-locked').checked = !!c.stage_time_locked;
+    document.getElementById('detail-jd').value = c.jd || '';
+    document.getElementById('detail-note').value = c.note || '';
+    document.getElementById('detail-zone').value = c.zone_override || '';
+    let html = '';
+    (c.history || []).forEach(s => {
+      html += `<div class="pnode pnode--done"><span class="pnode__mark">✓</span><span class="pnode__name">${s}</span></div>`;
+    });
+    if (c.stage === '已拒绝') {
+      html += `<div class="pnode pnode--reject"><span class="pnode__mark">❌</span><span class="pnode__name">已拒绝</span></div>`;
+    } else {
+      const label = c.stage === '等待' ? '等待中' : c.stage;
+      html += `<div class="pnode pnode--current"><span class="pnode__mark">●</span><span class="pnode__name">${label}</span></div>`;
+    }
+    document.getElementById('detail-path').innerHTML = html;
+    switchDetailTab('info');
+    document.getElementById('detail-modal').classList.add('is-open');
+  }
+  document.getElementById('detail-close').addEventListener('click', () => document.getElementById('detail-modal').classList.remove('is-open'));
+  function switchDetailTab(tab) {
+    document.querySelectorAll('.detail-tab').forEach(t => t.classList.toggle('is-active', t.dataset.dtab === tab));
+    document.getElementById('detail-page-info').style.display = tab === 'flow' ? 'none' : 'block';
+    document.getElementById('detail-page-flow').style.display = tab === 'flow' ? 'block' : 'none';
+  }
+  document.querySelectorAll('.detail-tab').forEach(t => {
+    t.addEventListener('click', () => switchDetailTab(t.dataset.dtab));
+  });
+  document.getElementById('detail-save').addEventListener('click', async () => {
+    if (!detailId) return;
+    const name = document.getElementById('detail-name').value.trim();
+    if (!name) { alert('请填写企业名称'); return; }
+    const url = document.getElementById('detail-url').value.trim();
+    const position = document.getElementById('detail-position').value.trim();
+    const jd = document.getElementById('detail-jd').value.trim();
+    const note = document.getElementById('detail-note').value.trim();
+    const deadline = document.getElementById('detail-deadline').value.trim();
+    const stage_time = document.getElementById('detail-stage-time').value.trim();
+    const stage_time_locked = document.getElementById('detail-stage-time-locked').checked;
+    await api(`/api/companies/${detailId}/update`, { method: 'POST', body: JSON.stringify({ name, url, position, jd, note, deadline, stage_time, stage_time_locked }) });
+    document.getElementById('detail-modal').classList.remove('is-open');
+    await reload();
+  });
+
+  document.getElementById('detail-zone').addEventListener('change', async () => {
+    if (!detailId) return;
+    await api(`/api/companies/${detailId}/zone`, { method: 'POST', body: JSON.stringify({ zone: document.getElementById('detail-zone').value }) });
+    await reload();
+  });
+
+  document.getElementById('detail-open-url').addEventListener('click', () => {
+    let url = document.getElementById('detail-url').value.trim();
+    if (!url) { alert('请先填写网址'); return; }
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    window.open(url, '_blank');
+  });
+
+  // 检测邮箱
+  document.getElementById('btn-check').addEventListener('click', async () => {
+    const status = document.getElementById('email-status');
+    status.textContent = '检测中…';
+    const res = await api('/api/check-email', { method: 'POST' });
+    const last = res.last_check ? ` · 上次检测 ${res.last_check.slice(5, 10)} ${res.last_check.slice(11, 16)}` : '';
+    if (res.throttled) {
+      status.textContent = res.message || '演示模式限流，请稍后再试';
+    } else {
+      status.textContent = (res.updated && res.updated.length ? `更新 ${res.updated.length} 家` : '无更新') + last;
+    }
+    await reload();
+  });
+
+  // 导入 Excel（在新建弹窗里）
+  document.getElementById('create-import').addEventListener('click', () => document.getElementById('import-file').click());
+  document.getElementById('import-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    const r = await fetch('/api/import', { method: 'POST', body: formData });
+    const res = await r.json();
+    if (res.error) alert('导入失败：' + res.error);
+    else alert(`成功导入 ${res.count} 家企业`);
+    e.target.value = '';
+    await reload();
+  });
+
+  // AI 功能：面试准备 + 周报
+  function md(text) {
+    return (text || '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+      .split('\n').map(line => {
+        const t = line.trim();
+        if (t.startsWith('## ')) return `<h3>${t.slice(3)}</h3>`;
+        if (t.startsWith('- ')) return `<div class="md-li">• ${t.slice(2)}</div>`;
+        if (t === '') return '';
+        return `<p>${t}</p>`;
+      }).join('');
+  }
+
+  async function showResult(title, promise) {
+    const modal = document.getElementById('result-modal');
+    const body = document.getElementById('result-body');
+    document.getElementById('result-title').textContent = title;
+    body.innerHTML = '<p style="color:var(--muted)">生成中…（约 30 秒）</p>';
+    modal.classList.add('is-open');
+    try {
+      const res = await promise;
+      body.innerHTML = md(res.report || res.prep || '生成失败');
+    } catch (e) {
+      body.innerHTML = '<p>生成失败：' + e + '</p>';
+    }
+  }
+
+  document.getElementById('detail-prep').addEventListener('click', () => {
+    if (!detailId) return;
+    showResult('AI 面试准备', api(`/api/companies/${detailId}/prep`, { method: 'POST' }));
+  });
+  document.getElementById('result-close').addEventListener('click', () => document.getElementById('result-modal').classList.remove('is-open'));
+
+  // Tab 切换 + 周报面板
+  let weeklyGenerated = false;
+  function switchTab(tab) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('is-active', t.dataset.tab === tab));
+    const inner = document.getElementById('panels-inner');
+    inner.classList.toggle('is-weekly', tab === 'weekly');
+    inner.classList.toggle('is-resume', tab === 'resume');
+    inner.classList.toggle('is-settings', tab === 'settings');
+    inner.classList.toggle('is-email', tab === 'email');
+    inner.classList.toggle('is-jobs', tab === 'jobs');
+    inner.classList.toggle('is-smart', tab === 'smart');
+    if (tab === 'resume') loadResumes();
+    if (tab === 'settings') { loadSettings(); loadPrompts(); switchSettingsTab('model'); }
+    if (tab === 'email') loadEmails();
+    if (tab === 'jobs') loadJobs();
+  }
+  async function generateWeekly() {
+    const body = document.getElementById('weekly-body');
+    body.innerHTML = '<p style="color:var(--muted)">生成中…（约 30 秒）</p>';
+    try {
+      const res = await api('/api/weekly-report', { method: 'POST' });
+      weeklyGenerated = true;
+      renderWeeklyReport(res);
+    } catch (e) {
+      body.innerHTML = '<p>生成失败：' + e + '</p>';
+    }
+  }
+
+  const NATURE_COLORS = { '银行': '#3987e5', '券商': '#d95926', '基金/资管/PE-VC': '#199e70', '保险': '#c98500', '国企': '#d55181', '互联网/科技': '#9085e9', '其他': '#898781' };
+  const SCALE_COLORS = { '大厂': '#3987e5', '中厂': '#d95926', '初创': '#199e70' };
+  const POSITION_COLORS = { '技术岗': '#3987e5', '非技术岗': '#d95926' };
+
+  function renderWeeklyReport(data) {
+    const body = document.getElementById('weekly-body');
+    const st = data.stage || {};
+    let html = '';
+    html += '<div class="wk-stats">';
+    html += `<div class="wk-stat"><b>${data.total}</b><span>总投递</span></div>`;
+    html += `<div class="wk-stat"><b>${st['待投递'] || 0}</b><span>待投递</span></div>`;
+    html += `<div class="wk-stat"><b>${st['进行中'] || 0}</b><span>进行中</span></div>`;
+    html += `<div class="wk-stat"><b>${st['已拒绝'] || 0}</b><span>已拒绝</span></div>`;
+    html += '</div>';
+    html += '<div class="wk-section">企业性质</div>';
+    html += '<div class="wk-chart"><canvas id="chart-nature"></canvas></div>';
+    html += '<div class="wk-section">企业规模</div>';
+    html += '<div class="wk-chart"><canvas id="chart-scale"></canvas></div>';
+    html += '<div class="wk-section">岗位技术要求</div>';
+    html += '<div class="wk-chart"><canvas id="chart-tech"></canvas></div>';
+    if (data.summary) html += `<div class="wk-summary">${data.summary}</div>`;
+    body.innerHTML = html;
+    renderDoughnut('chart-nature', data.nature, NATURE_COLORS, data.nature_detail);
+    renderDoughnut('chart-scale', data.scale, SCALE_COLORS, data.scale_detail);
+    renderDoughnut('chart-tech', data.tech, POSITION_COLORS, data.tech_detail);
+  }
+
+  function renderDoughnut(canvasId, counts, colors, detail) {
+    const el = document.getElementById(canvasId);
+    if (!el || !window.Chart) return;
+    const labels = Object.keys(counts || {});
+    const values = Object.values(counts || {});
+    new Chart(el, {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{ data: values, backgroundColor: labels.map(l => colors[l] || '#898781'), borderWidth: 0, hoverOffset: 4 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '62%',
+        plugins: {
+          legend: { position: 'bottom', labels: { color: '#c3c2b7', font: { size: 11 }, padding: 10, usePointStyle: true } }
+        },
+        onClick: (evt, elements) => {
+          if (elements.length > 0) {
+            const label = labels[elements[0].index];
+            showCompanies(label, (detail && detail[label]) || []);
+          }
+        }
+      }
+    });
+  }
+
+  function showCompanies(label, names) {
+    const modal = document.getElementById('result-modal');
+    document.getElementById('result-title').textContent = label;
+    document.getElementById('result-body').innerHTML = names.length
+      ? names.map(n => `<div class="md-li">• ${n}</div>`).join('')
+      : '<p>（无）</p>';
+    modal.classList.add('is-open');
+  }
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => switchTab(t.dataset.tab));
+  });
+  document.getElementById('btn-regenerate').addEventListener('click', generateWeekly);
+
+  // 简历（多份，按岗位方向）
+  let RESUME_LIST = [];
+  let editingResumeName = null;
+  async function loadResumes() {
+    const res = await api('/api/resumes');
+    RESUME_LIST = res.resumes || [];
+    renderResumes();
+  }
+  function renderResumes() {
+    const list = document.getElementById('resume-list');
+    if (!RESUME_LIST.length) {
+      list.innerHTML = '<p style="color:var(--muted); font-size:12.5px; padding: 8px 14px;">还没有简历，点「新建简历」添加</p>';
+      return;
+    }
+    list.innerHTML = RESUME_LIST.map(r => `
+      <div class="resume-item" data-name="${r.name}">
+        <span class="resume-item__name">${r.name}</span>
+        <span class="resume-item__arrow">›</span>
+      </div>`).join('');
+    list.querySelectorAll('.resume-item').forEach(el => {
+      el.addEventListener('click', () => openResume(el.dataset.name));
+    });
+  }
+  function openResume(name) {
+    editingResumeName = name;
+    const r = RESUME_LIST.find(x => x.name === name);
+    document.getElementById('resume-name').value = name || '';
+    document.getElementById('resume-content').value = r ? r.content : '';
+    document.getElementById('resume-delete').style.display = name ? 'inline-block' : 'none';
+    document.getElementById('resume-open').style.display = (r && r.has_file) ? 'inline-block' : 'none';
+    document.getElementById('resume-detail-modal').classList.add('is-open');
+  }
+  document.getElementById('btn-resume-new').addEventListener('click', () => openResume(''));
+  document.getElementById('resume-save').addEventListener('click', async () => {
+    const name = document.getElementById('resume-name').value.trim();
+    const content = document.getElementById('resume-content').value;
+    if (!name) { alert('请填写岗位方向'); return; }
+    await api('/api/resumes', { method: 'POST', body: JSON.stringify({ name, content }) });
+    document.getElementById('resume-detail-modal').classList.remove('is-open');
+    await loadResumes();
+  });
+  document.getElementById('resume-delete').addEventListener('click', async () => {
+    if (!editingResumeName) return;
+    await api(`/api/resumes/${encodeURIComponent(editingResumeName)}`, { method: 'DELETE' });
+    document.getElementById('resume-detail-modal').classList.remove('is-open');
+    await loadResumes();
+  });
+  document.getElementById('resume-detail-close').addEventListener('click', () => document.getElementById('resume-detail-modal').classList.remove('is-open'));
+  document.getElementById('resume-upload').addEventListener('click', () => document.getElementById('resume-pdf-file').click());
+  document.getElementById('resume-pdf-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const name = document.getElementById('resume-name').value.trim();
+    if (!name) { alert('请先填写岗位方向'); e.target.value = ''; return; }
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('name', name);
+    const r = await fetch('/api/resumes/upload', { method: 'POST', body: formData });
+    const res = await r.json();
+    if (res.error) alert('上传失败：' + res.error);
+    else {
+      document.getElementById('resume-open').style.display = 'inline-block';
+    }
+    e.target.value = '';
+  });
+  document.getElementById('resume-open').addEventListener('click', () => {
+    const name = document.getElementById('resume-name').value.trim();
+    if (name) window.open(`/api/resumes/${encodeURIComponent(name)}/file`, '_blank');
+  });
+
+  // AI 配置
+  const VENDORS = {
+    deepseek: { base_url: 'https://api.deepseek.com', model: 'deepseek-flash' },
+    doubao: { base_url: 'https://ark.cn-beijing.volces.com/api/v3', model: 'doubao-pro-32k' },
+    kimi: { base_url: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
+    glm: { base_url: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4-plus' },
+    qwen: { base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' }
+  };
+  async function loadSettings() {
+    const res = await api('/api/settings');
+    document.getElementById('setting-base-url').value = res.llm_base_url || '';
+    document.getElementById('setting-model').value = res.llm_model || '';
+    document.getElementById('setting-llm').value = res.llm_api_key || '';
+    document.getElementById('setting-search-url').value = res.search_base_url || '';
+    document.getElementById('setting-search-key').value = res.search_api_key || '';
+  }
+  document.getElementById('setting-vendor').addEventListener('change', e => {
+    const v = VENDORS[e.target.value];
+    if (v) {
+      document.getElementById('setting-base-url').value = v.base_url;
+      document.getElementById('setting-model').value = v.model;
+    }
+  });
+  document.getElementById('btn-settings-save').addEventListener('click', async () => {
+    const llm_base_url = document.getElementById('setting-base-url').value.trim();
+    const llm_model = document.getElementById('setting-model').value.trim();
+    const llm_api_key = document.getElementById('setting-llm').value.trim();
+    const search_base_url = document.getElementById('setting-search-url').value.trim();
+    const search_api_key = document.getElementById('setting-search-key').value.trim();
+    await api('/api/settings', { method: 'POST', body: JSON.stringify({ llm_base_url, llm_model, llm_api_key, search_base_url, search_api_key }) });
+    alert('已保存');
+  });
+  let PROMPT_DEFAULTS = {};
+  async function loadPrompts() {
+    const res = await api('/api/prompts');
+    PROMPT_DEFAULTS = {
+      interview_prep: res.interview_prep_default || '',
+      weekly_summary: res.weekly_summary_default || ''
+    };
+    document.getElementById('setting-prep-prompt').value = res.interview_prep || '';
+    document.getElementById('setting-weekly-prompt').value = res.weekly_summary || '';
+  }
+  document.getElementById('btn-prompts-save').addEventListener('click', async () => {
+    const interview_prep_prompt = document.getElementById('setting-prep-prompt').value;
+    const weekly_summary_prompt = document.getElementById('setting-weekly-prompt').value;
+    await api('/api/prompts', { method: 'POST', body: JSON.stringify({ interview_prep_prompt, weekly_summary_prompt }) });
+    alert('已保存 Prompt');
+  });
+  document.getElementById('btn-prompts-reset').addEventListener('click', async () => {
+    document.getElementById('setting-prep-prompt').value = PROMPT_DEFAULTS.interview_prep;
+    document.getElementById('setting-weekly-prompt').value = PROMPT_DEFAULTS.weekly_summary;
+    const interview_prep_prompt = document.getElementById('setting-prep-prompt').value;
+    const weekly_summary_prompt = document.getElementById('setting-weekly-prompt').value;
+    await api('/api/prompts', { method: 'POST', body: JSON.stringify({ interview_prep_prompt, weekly_summary_prompt }) });
+    alert('已恢复默认并保存');
+  });
+  function switchSettingsTab(tab) {
+    document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('is-active', t.dataset.stab === tab));
+    document.getElementById('settings-page-model').style.display = tab === 'prompt' ? 'none' : 'block';
+    document.getElementById('settings-page-prompt').style.display = tab === 'prompt' ? 'block' : 'none';
+  }
+  document.querySelectorAll('.settings-tab').forEach(t => {
+    t.addEventListener('click', () => switchSettingsTab(t.dataset.stab));
+  });
+
+  // 邮箱
+  let EMAILS = [];
+  async function loadEmails() {
+    const res = await api('/api/emails');
+    EMAILS = res.emails || [];
+    renderEmails();
+  }
+  function renderEmails() {
+    const list = document.getElementById('email-list');
+    if (!EMAILS.length) {
+      list.innerHTML = '<p style="color:var(--muted); font-size:12.5px; padding: 8px 14px;">还没有邮箱，点「添加邮箱」</p>';
+      return;
+    }
+    list.innerHTML = EMAILS.map(e => `
+      <div class="email-item">
+        <div class="email-item__main">
+          <div class="email-item__addr">${e.address}</div>
+          <div class="email-item__imap">${e.imap_server}</div>
+        </div>
+        <button class="mini mini--danger" data-email="${e.address}" title="删除">✕</button>
+      </div>`).join('');
+    list.querySelectorAll('[data-email]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await api(`/api/emails/${encodeURIComponent(btn.dataset.email)}`, { method: 'DELETE' });
+        await loadEmails();
+      });
+    });
+  }
+  function openEmailModal() {
+    document.getElementById('email-imap').value = '';
+    document.getElementById('email-address').value = '';
+    document.getElementById('email-password').value = '';
+    document.getElementById('email-modal').classList.add('is-open');
+  }
+  document.getElementById('btn-email-new').addEventListener('click', openEmailModal);
+  document.getElementById('email-cancel').addEventListener('click', () => document.getElementById('email-modal').classList.remove('is-open'));
+  document.getElementById('email-save').addEventListener('click', async () => {
+    const imap_server = document.getElementById('email-imap').value.trim();
+    const address = document.getElementById('email-address').value.trim();
+    const password = document.getElementById('email-password').value.trim();
+    if (!address || !password) { alert('请填写邮箱地址和授权码'); return; }
+    await api('/api/emails', { method: 'POST', body: JSON.stringify({ imap_server, address, password }) });
+    document.getElementById('email-modal').classList.remove('is-open');
+    await loadEmails();
+  });
+
+  // 岗位库
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  let JOBS_META = null;
+  let JOBS = [];
+  let SMART_ITEMS = [];
+  let JOBS_OFFSET = 0;
+  let JOBS_HAS_MORE = false;
+  let JOBS_LOC_TERMS = [];
+  async function loadJobs(params, append) {
+    if (!params) params = currentJobFilters();
+    JOBS_LOC_TERMS = (params.location || '').split(/[,，、\s]+/).filter(Boolean);
+    const offset = append ? JOBS_OFFSET : 0;
+    const qs = new URLSearchParams({ ...params, offset, limit: 100 }).toString();
+    const res = await api('/api/jobs?' + qs);
+    if (!JOBS_META) {
+      JOBS_META = res.meta;
+      fillJobSelect('jobs-industry', res.meta.industries);
+      fillJobSelect('jobs-nature', res.meta.natures);
+      fillJobSelect('jobs-year', res.meta.years);
+      fillJobSelect('jobs-education', res.meta.educations);
+      fillJobSelect('jobs-batch', res.meta.batches);
+    }
+    JOBS_OFFSET = offset + res.jobs.length;
+    JOBS_HAS_MORE = res.has_more;
+    document.getElementById('jobs-meta').textContent = `共 ${res.total} 条匹配（已显示 ${JOBS_OFFSET}，库内 ${res.count} 条）`;
+    renderJobs(res.jobs, append);
+    updateJobsMore();
+  }
+  function fillJobSelect(id, options, preferred) {
+    const sel = document.getElementById(id);
+    const cur = sel.value || (preferred && options.includes(preferred) ? preferred : '');
+    sel.innerHTML = '<option value="">全部</option>' + options.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('');
+    sel.value = cur;
+  }
+  function currentJobFilters() {
+    return {
+      q: document.getElementById('jobs-q').value.trim(),
+      location: document.getElementById('jobs-location').value.trim(),
+      industry: document.getElementById('jobs-industry').value,
+      nature: document.getElementById('jobs-nature').value,
+      year: document.getElementById('jobs-year').value,
+      education: document.getElementById('jobs-education').value,
+      batch: document.getElementById('jobs-batch').value,
+      sort: document.getElementById('jobs-sort').value,
+      order: document.getElementById('jobs-order').checked ? 'desc' : 'asc',
+      mark: document.getElementById('jobs-mark').value
+    };
+  }
+  function locDisplay(j) {
+    const loc = (j.location || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (!loc.length) return '';
+    if (!JOBS_LOC_TERMS.length) return loc[0];
+    const matched = loc.filter(t => JOBS_LOC_TERMS.some(term => t.includes(term) || term.includes(t)));
+    return (matched.length ? matched : [loc[0]]).join(', ');
+  }
+  function jobCardHtml(j) {
+    const mark = j.mark || '';
+    const tags = [j.nature, j.industry.split(',')[0], locDisplay(j)];
+    if (mark === 'unsuitable') tags.unshift('不合适');
+    else if (mark === 'consider') tags.unshift('待考虑');
+    else if (mark === 'applied') tags.unshift('已加入待投');
+    const tagsHtml = tags.filter(Boolean).map(t => {
+      const cls = t === '不合适' ? ' job-tag--bad' : (t === '待考虑' ? ' job-tag--consider' : (t === '已加入待投' ? ' job-tag--applied' : ''));
+      return `<span class="job-tag${cls}">${esc(t)}</span>`;
+    }).join('');
+    const dl = j.deadline ? `<span class="job-deadline">${j.deadline.indexOf('尽快') >= 0 ? '⏰ 尽快投递' : '截止 ' + esc(j.deadline)}</span>` : '';
+    const link = /^https?:\/\//i.test(j.apply_url) ? `<a class="job-link" href="${esc(j.apply_url)}" target="_blank" rel="noopener">投递↗</a>` : '';
+    const src = /^https?:\/\//i.test(j.source_url) ? `<a class="job-link" href="${esc(j.source_url)}" target="_blank" rel="noopener">公告</a>` : '';
+    const noteHtml = (mark === 'consider' && j.note) ? `<div class="job-reason">💡 ${esc(j.note)}</div>` : '';
+    let actions = '';
+    if (mark === 'applied') {
+      actions = `<button class="mini mini--ghost" data-act="unmark" data-id="${j.id}">取消已加入</button>`;
+    } else {
+      if (mark === 'unsuitable') {
+        actions = `<button class="mini mini--ghost" data-act="unmark" data-id="${j.id}">取消标注</button>`;
+      } else if (mark === 'consider') {
+        actions = `<button class="mini mini--ghost" data-act="unmark" data-id="${j.id}">取消待考虑</button>`;
+      } else {
+        actions = `<button class="mini mini--ghost" data-act="consider" data-id="${j.id}">待考虑</button><button class="mini mini--ghost" data-act="mark" data-id="${j.id}">不合适</button>`;
+      }
+      actions += `<button class="mini mini--solid" data-act="add" data-id="${j.id}">加入待投递区</button>`;
+    }
+    return `<div class="job-card">
+      <div class="job-top"><span class="job-company">${esc(j.company)}</span>${dl}</div>
+      <div class="job-pos">${esc(j.position) || '（无岗位描述）'}</div>
+      <div class="job-tags">${tagsHtml}</div>
+      ${noteHtml}
+      <div class="job-foot">${j.updated ? '更新 ' + esc(String(j.updated).slice(0, 10)) + ' · ' : ''}${esc(j.year)} · ${esc(j.education)}${j.exam === '有笔试' ? ' · 有笔试' : ''} ${link} ${src}</div>
+      <div class="job-actions">${actions}</div>
+    </div>`;
+  }
+  function renderJobs(jobs, append) {
+    if (append) JOBS = JOBS.concat(jobs);
+    else JOBS = jobs;
+    const list = document.getElementById('jobs-list');
+    if (append) {
+      list.insertAdjacentHTML('beforeend', jobs.map(jobCardHtml).join(''));
+    } else {
+      if (!jobs.length) { list.innerHTML = '<p style="color:var(--muted); font-size:12.5px; padding: 8px 14px;">没有匹配的岗位</p>'; return; }
+      list.innerHTML = jobs.map(jobCardHtml).join('');
+    }
+  }
+  function updateJobsMore() {
+    const btn = document.getElementById('btn-jobs-more');
+    btn.style.display = JOBS_HAS_MORE ? 'block' : 'none';
+    btn.textContent = `加载更多（已显示 ${JOBS_OFFSET}）`;
+  }
+  document.getElementById('btn-jobs-more').addEventListener('click', () => loadJobs(currentJobFilters(), true));
+  document.getElementById('btn-jobs-upload').addEventListener('click', () => document.getElementById('jobs-file').click());
+  document.getElementById('jobs-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('merge', document.getElementById('jobs-merge-mode').checked ? '1' : '0');
+    const btn = document.getElementById('btn-jobs-upload');
+    btn.textContent = '解析中…';
+    try {
+      const r = await fetch('/api/jobs/upload', { method: 'POST', body: fd });
+      const res = await r.json();
+      if (res.error) throw new Error(res.error);
+      const mode = document.getElementById('jobs-merge-mode').checked ? '更新' : '覆盖';
+      alert(mode + '导入完成：共 ' + res.count + ' 条岗位' + (res.skipped ? '（跳过 ' + res.skipped + ' 条已截止）' : ''));
+      JOBS_META = null;
+      await loadJobs();
+    } catch (err) {
+      alert('导入失败：' + (err.message || err));
+    } finally {
+      btn.textContent = '上传Excel';
+      e.target.value = '';
+    }
+  });
+  let jobsTimer;
+  ['jobs-q', 'jobs-location', 'jobs-industry', 'jobs-nature', 'jobs-year', 'jobs-education', 'jobs-batch', 'jobs-sort', 'jobs-order', 'jobs-mark'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', () => { clearTimeout(jobsTimer); jobsTimer = setTimeout(() => loadJobs(), 300); });
+    el.addEventListener('change', () => loadJobs());
+  });
+  async function markJob(id, mark, note) {
+    try {
+      await api('/api/jobs/mark', { method: 'POST', body: JSON.stringify({ id, mark, note }) });
+      await loadJobs();
+    } catch (e) {
+      alert('操作失败：' + e);
+    }
+  }
+  let considerId = null;
+  let pendingApplyJobId = null;
+  function openConsider(id, note) {
+    considerId = id;
+    document.getElementById('consider-note').value = note || '';
+    document.getElementById('consider-modal').classList.add('is-open');
+  }
+  document.getElementById('consider-save').addEventListener('click', () => {
+    if (considerId == null) return;
+    const note = document.getElementById('consider-note').value.trim();
+    document.getElementById('consider-modal').classList.remove('is-open');
+    markJob(considerId, 'consider', note);
+    considerId = null;
+  });
+  document.getElementById('consider-cancel').addEventListener('click', () => {
+    document.getElementById('consider-modal').classList.remove('is-open');
+    considerId = null;
+  });
+  function openCreatePrefilled(name, position, url, deadline) {
+    document.getElementById('create-name').value = name || '';
+    document.getElementById('create-position').value = position || '';
+    document.getElementById('create-url').value = url || '';
+    document.getElementById('create-deadline').value = deadline || '';
+    createModal.classList.add('is-open');
+  }
+  document.getElementById('jobs-list').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    const id = Number(btn.dataset.id);
+    const job = JOBS.find(j => j.id === id);
+    if (!job) return;
+    const act = btn.dataset.act;
+    if (act === 'mark') markJob(id, 'unsuitable');
+    else if (act === 'consider') openConsider(id, job.note);
+    else if (act === 'unmark') markJob(id, '');
+    else if (act === 'add') { pendingApplyJobId = id; openCreatePrefilled(job.company, job.position, job.apply_url, job.deadline); }
+  });
+
+  // 智能选岗
+  document.getElementById('btn-smart-run').addEventListener('click', async () => {
+    const tiers = document.getElementById('smart-tiers');
+    tiers.innerHTML = '<p style="color:var(--muted); font-size:12.5px;">AI 分析中…（约 30-60 秒）</p>';
+    try {
+      const requirement = document.getElementById('smart-req').value.trim();
+      const res = await api('/api/recommend', { method: 'POST', body: JSON.stringify({ requirement }) });
+      renderSmart(res);
+    } catch (e) {
+      tiers.innerHTML = '<p style="color:#d55181; font-size:12.5px;">生成失败：' + e + '</p>';
+    }
+  });
+  function renderSmart(res) {
+    SMART_ITEMS = [];
+    const tiers = [
+      { key: 'finance', label: '💰 金融相关', color: '#199e70' },
+      { key: 'ai', label: '🤖 AI 相关', color: '#3987e5' },
+      { key: 'hot', label: '🔥 热门/新兴', color: '#c98500' }
+    ];
+    let html = '';
+    for (const t of tiers) {
+      const items = res[t.key] || [];
+      html += `<div class="smart-tier"><div class="smart-tier__head" style="color:${t.color}">${t.label}（${items.length}）</div>`;
+      if (!items.length) html += '<p style="color:var(--muted); font-size:12px;">（无）</p>';
+      for (const it of items) {
+        SMART_ITEMS.push(it);
+        const tags = [it.nature, (it.industry || '').split(',')[0], (it.location || '').split(',')[0]].filter(Boolean).map(x => `<span class="job-tag">${esc(x)}</span>`).join('');
+        const dl = it.deadline ? `<span class="job-deadline">${it.deadline.indexOf('尽快') >= 0 ? '⏰尽快投递' : '截止 ' + esc(it.deadline)}</span>` : '';
+        const link = /^https?:\/\//i.test(it.apply_url || '') ? `<a class="job-link" href="${esc(it.apply_url)}" target="_blank" rel="noopener">投递↗</a>` : '';
+        html += `<div class="job-card">
+          <div class="job-top"><span class="job-company">${esc(it.company)}</span>${dl}</div>
+          <div class="job-pos">${esc(it.position) || '（无岗位描述）'}</div>
+          <div class="job-tags">${tags}</div>
+          ${it.reason ? `<div class="job-reason">💡 ${esc(it.reason)}</div>` : ''}
+          <div class="job-foot">${esc(it.year)} · ${esc(it.education)}${it.exam === '有笔试' ? ' · 有笔试' : ''} ${link}</div>
+          <div class="job-actions"><button class="mini mini--solid" data-smart-add="${it.id}">加入待投递区</button></div>
+        </div>`;
+      }
+      html += '</div>';
+    }
+    document.getElementById('smart-tiers').innerHTML = html;
+  }
+  document.getElementById('smart-tiers').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-smart-add]');
+    if (!btn) return;
+    const id = Number(btn.dataset.smartAdd);
+    const job = SMART_ITEMS.find(j => j.id === id);
+    if (!job) return;
+    openCreatePrefilled(job.company, job.position, job.apply_url, job.deadline);
+  });
+
+  // 日期
+  const now = new Date();
+  const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  document.getElementById('widget-date').textContent = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 · ${weekdays[now.getDay()]}`;
+
+  // 演示模式横幅（/api/settings 返回 demo:true 时显示）
+  fetch('/api/settings').then(r => r.json()).then(s => {
+    if (s && s.demo) {
+      const b = document.createElement('div');
+      b.className = 'demo-banner';
+      b.textContent = '演示模式 · 数据为虚构 Demo，AI 结果为预生成缓存';
+      document.querySelector('.widget').prepend(b);
+    }
+  }).catch(() => {});
+
+  reload();
+</script>
+</body>
+</html>

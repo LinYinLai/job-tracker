@@ -1,0 +1,15 @@
+{
+  "name": "job-tracker-desktop",
+  "version": "1.0.0",
+  "description": "秋招流程助手桌面版",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
+  }
+}
